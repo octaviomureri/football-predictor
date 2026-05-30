@@ -1,4 +1,4 @@
-from api_client import get_team_schedule, get_summary, LEAGUES
+from api_client import get_team_schedule, get_summary, get_all_team_events, LEAGUES
 
 def safe(val, default=0):
     return val if val is not None else default
@@ -87,6 +87,7 @@ def analyze_schedule(events, team_id, league_slug, last=10):
     ]
 
     for e in finished[-last:]:
+        league_slug = e.get("_league_slug", league_slug)
         comp = e["competitions"][0]
         home_comp = next((c for c in comp.get("competitors", []) if c["homeAway"] == "home"), None)
         away_comp = next((c for c in comp.get("competitors", []) if c["homeAway"] == "away"), None)
@@ -141,6 +142,9 @@ def analyze_schedule(events, team_id, league_slug, last=10):
     matches = len(results)
     avg = lambda lst: round(sum(lst) / len(lst), 2) if lst else 0
 
+    # Competiciones únicas analizadas
+    competitions = list({e.get("_league_slug", "") for e in finished[-last:] if e.get("_league_slug")})
+
     return {
         "form": "".join(results[-5:]),
         "points": sum(3 if r == "W" else 1 if r == "D" else 0 for r in results),
@@ -151,6 +155,7 @@ def analyze_schedule(events, team_id, league_slug, last=10):
         "avg_shots_on": avg(shots_on_list),
         "avg_fouls": avg(fouls_list),
         "matches_analyzed": matches,
+        "competitions_count": len(competitions),
         "top_scorers": [{"name": n, "goals": g} for n, g in sorted(all_goals.items(), key=lambda x: -x[1])[:5]],
         "top_assists": [{"name": n, "assists": a} for n, a in sorted(all_assists.items(), key=lambda x: -x[1])[:5]],
         "top_cards": [{"name": n, "yellow": v["yellow"], "red": v["red"]}
@@ -225,11 +230,8 @@ def get_mood_alerts(home_form, away_form, home_name, away_name):
     return alerts
 
 def analyze_match(league_slug, home_team_id, away_team_id, home_name="Local", away_name="Visitante"):
-    home_sched = get_team_schedule(league_slug, home_team_id)
-    away_sched = get_team_schedule(league_slug, away_team_id)
-
-    home_events = home_sched.get("events", [])
-    away_events = away_sched.get("events", [])
+    home_events = get_all_team_events(home_team_id, league_slug)
+    away_events = get_all_team_events(away_team_id, league_slug)
 
     home_form = analyze_schedule(home_events, home_team_id, league_slug)
     away_form = analyze_schedule(away_events, away_team_id, league_slug)

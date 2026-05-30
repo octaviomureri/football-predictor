@@ -18,6 +18,10 @@ LEAGUES = {
     "Mundial":           "fifa.world",
 }
 
+# Ligas europeas que compiten en Champions/Europa
+EUROPEAN_LEAGUES = ["eng.1", "esp.1", "ita.1", "ger.1", "fra.1"]
+SOUTH_AMERICAN_LEAGUES = ["bra.1", "arg.1"]
+
 def get(path, params=None):
     resp = requests.get(f"{BASE_URL}/{path}", headers=HEADERS, params=params, timeout=10)
     resp.raise_for_status()
@@ -35,8 +39,35 @@ def get_teams(league_slug):
 def get_summary(league_slug, event_id):
     return get(f"{league_slug}/summary", {"event": event_id})
 
-def get_roster(league_slug, team_id):
-    return get(f"{league_slug}/teams/{team_id}/roster")
+def get_all_team_events(team_id, primary_slug):
+    """Obtiene partidos del equipo en todas sus competiciones relevantes."""
+    all_events = []
+    seen_event_ids = set()
+
+    # Determinar ligas adicionales a consultar según la liga principal
+    extra_slugs = []
+    if primary_slug in EUROPEAN_LEAGUES:
+        extra_slugs = ["uefa.champions", "uefa.europa"]
+    elif primary_slug in SOUTH_AMERICAN_LEAGUES:
+        extra_slugs = ["conmebol.libertadores", "conmebol.sudamericana"]
+
+    slugs_to_check = [primary_slug] + extra_slugs
+
+    for slug in slugs_to_check:
+        try:
+            data = get_team_schedule(slug, team_id)
+            events = data.get("events", [])
+            for e in events:
+                if e["id"] not in seen_event_ids:
+                    seen_event_ids.add(e["id"])
+                    e["_league_slug"] = slug  # guardamos de qué liga viene
+                    all_events.append(e)
+        except Exception:
+            continue
+
+    # Ordenar por fecha
+    all_events.sort(key=lambda e: e.get("date", ""))
+    return all_events
 
 def search_teams_across_leagues(query):
     results = []
