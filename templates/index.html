@@ -9,8 +9,7 @@
     body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; min-height: 100vh; }
     header { background: #1a1d27; padding: 16px 24px; border-bottom: 2px solid #2a2d3e; display: flex; align-items: center; gap: 12px; }
     header h1 { font-size: 1.3rem; color: #fff; flex: 1; }
-    .container { max-width: 960px; margin: 28px auto; padding: 0 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-    @media(max-width: 680px) { .container { grid-template-columns: 1fr; } }
+    .container { max-width: 600px; margin: 20px auto; padding: 0 12px; display: flex; flex-direction: column; gap: 16px; }
     .card { background: #1a1d27; border-radius: 14px; padding: 20px; border: 1px solid #2a2d3e; }
     .card-title { font-size: 0.75rem; color: #666; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; }
     select, input[type=text] { width: 100%; background: #0f1117; color: #e0e0e0; border: 1px solid #3a3d4e; padding: 9px 12px; border-radius: 8px; font-size: 0.92rem; }
@@ -45,7 +44,7 @@
     .fixture-date { font-size: 0.7rem; color: #555; }
 
     /* Result section */
-    .result-section { grid-column: 1 / -1; }
+    .result-section { }
     .result-card { background: #1a1d27; border-radius: 14px; padding: 24px; border: 1px solid #2a2d3e; display: none; }
     .result-card.visible { display: block; }
     .match-title { font-size: 1.05rem; font-weight: 700; color: #fff; margin-bottom: 18px; text-align: center; display: flex; align-items: center; justify-content: center; gap: 10px; }
@@ -117,18 +116,36 @@
   </header>
 
   <div class="container">
-    <!-- Panel izquierdo: selector de equipos -->
+    <!-- Paso 1: Elegir liga -->
     <div class="card">
-      <div class="card-title">Analizar partido</div>
+      <div class="card-title">① Elegí la liga</div>
+      <select id="fixtureLeague" onchange="resetFlow()">
+        {% for league in leagues %}
+        <option value="{{ league }}">{{ league }}</option>
+        {% endfor %}
+      </select>
+      <button class="btn" onclick="loadFixtures()" style="margin-top:12px">Cargar partidos</button>
+    </div>
 
-      <label>Liga</label>
-      <select id="leagueSelect">
+    <!-- Paso 2: Elegir partido -->
+    <div class="card" id="step2Card" style="display:none">
+      <div class="card-title">② Elegí el partido <span style="font-size:0.7rem;color:#4a6fa5;margin-left:6px">o buscá equipos abajo</span></div>
+      <div id="fixturesList">
+        <div style="font-size:0.82rem;color:#555;padding:12px 0">Cargando...</div>
+      </div>
+    </div>
+
+    <!-- Paso 3: Equipos y analizar -->
+    <div class="card">
+      <div class="card-title">③ Equipos</div>
+
+      <select id="leagueSelect" style="display:none">
         {% for league in leagues %}
         <option value="{{ league }}">{{ league }}</option>
         {% endfor %}
       </select>
 
-      <label>Equipo local</label>
+      <label>Local</label>
       <div class="team-search">
         <input type="text" id="homeInput" placeholder="Buscar equipo..." autocomplete="off"
           oninput="searchTeam('home')" onfocus="openResults('home')" onblur="closeResults('home', 200)"/>
@@ -136,7 +153,7 @@
       </div>
       <div class="selected-team" id="homeSelected"><span style="color:#555">Sin seleccionar</span></div>
 
-      <label>Equipo visitante</label>
+      <label style="margin-top:14px">Visitante</label>
       <div class="team-search">
         <input type="text" id="awayInput" placeholder="Buscar equipo..." autocomplete="off"
           oninput="searchTeam('away')" onfocus="openResults('away')" onblur="closeResults('away', 200)"/>
@@ -147,24 +164,7 @@
       <button class="btn" onclick="analyze()">Analizar partido</button>
     </div>
 
-    <!-- Panel derecho: próximos partidos -->
-    <div class="card">
-      <div class="card-title">
-        <div class="league-select-wrap">
-          <select id="fixtureLeague" style="flex:1">
-            {% for league in leagues %}
-            <option value="{{ league }}">{{ league }}</option>
-            {% endfor %}
-          </select>
-          <button class="load-btn" onclick="loadFixtures()">Cargar partidos</button>
-        </div>
-      </div>
-      <div id="fixturesList">
-        <div style="font-size:0.82rem;color:#555;padding:12px 0">Seleccioná una liga y hacé clic en Cargar</div>
-      </div>
-    </div>
-
-    <!-- Resultado full width -->
+    <!-- Resultado -->
     <div class="result-section">
       <div class="result-card" id="resultCard">
         <div id="resultContent"></div>
@@ -210,26 +210,35 @@
       setTimeout(() => document.getElementById(side + 'Results').classList.remove('open'), delay);
     }
 
+    function resetFlow() {
+      document.getElementById('step2Card').style.display = 'none';
+    }
+
     function selectFixture(homeId, homeName, homeLogo, awayId, awayName, awayLogo, leagueSlug) {
       selectTeam('home', homeId, homeName, homeLogo, leagueSlug);
       selectTeam('away', awayId, awayName, awayLogo, leagueSlug);
       document.getElementById('homeInput').value = homeName;
       document.getElementById('awayInput').value = awayName;
       document.getElementById('leagueSelect').value = document.getElementById('fixtureLeague').value;
+      // Scroll suave al paso 3
+      document.querySelector('.btn[onclick="analyze()"]').scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
     async function loadFixtures() {
       const league = document.getElementById('fixtureLeague').value;
+      const step2 = document.getElementById('step2Card');
       const list = document.getElementById('fixturesList');
+      step2.style.display = 'block';
       list.innerHTML = '<div class="loading-box" style="padding:20px"><div class="spinner"></div></div>';
+      step2.scrollIntoView({ behavior: 'smooth' });
       try {
         const res = await fetch(`/api/next-fixtures?league=${encodeURIComponent(league)}`);
         const data = await res.json();
         if (data.error) { list.innerHTML = `<div class="error-box">${data.error}</div>`; return; }
         if (!data.length) { list.innerHTML = '<div style="font-size:0.82rem;color:#555;padding:12px 0">Sin partidos disponibles</div>'; return; }
+        const leagueSlug = document.getElementById('fixtureLeague').value;
         list.innerHTML = '<div class="fixtures-list">' + data.map(f => {
           const dateStr = f.date ? new Date(f.date).toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
-          const leagueSlug = document.getElementById('fixtureLeague').value;
           return `<div class="fixture-item" onclick="selectFixture(${f.home_id},'${esc(f.home_name)}','${f.home_logo}',${f.away_id},'${esc(f.away_name)}','${f.away_logo}','${leagueSlug}')">
             <div class="fixture-team"><img src="${f.home_logo}" onerror="this.style.display='none'"/> ${f.home_name}</div>
             <span class="fixture-vs">vs</span>
