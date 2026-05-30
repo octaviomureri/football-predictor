@@ -229,12 +229,12 @@ def get_mood_alerts(home_form, away_form, home_name, away_name):
             alerts.append(f"ℹ️ {name}: pocos partidos disponibles ({form['matches_analyzed']})")
     return alerts
 
-def analyze_match(league_slug, home_team_id, away_team_id, home_name="Local", away_name="Visitante"):
-    home_events = get_all_team_events(home_team_id, league_slug)
-    away_events = get_all_team_events(away_team_id, league_slug)
+def analyze_match(home_slug, away_slug, home_team_id, away_team_id, home_name="Local", away_name="Visitante"):
+    home_events = get_all_team_events(home_team_id, home_slug)
+    away_events = get_all_team_events(away_team_id, away_slug)
 
-    home_form = analyze_schedule(home_events, home_team_id, league_slug)
-    away_form = analyze_schedule(away_events, away_team_id, league_slug)
+    home_form = analyze_schedule(home_events, home_team_id, home_slug)
+    away_form = analyze_schedule(away_events, away_team_id, away_slug)
     h2h = analyze_h2h(home_events, home_team_id, away_team_id)
     prediction = predict_result(home_form, away_form)
     alerts = get_mood_alerts(home_form, away_form, home_name, away_name)

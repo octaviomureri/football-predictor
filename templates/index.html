@@ -255,7 +255,7 @@
       resultCard.scrollIntoView({ behavior: 'smooth' });
 
       try {
-        const url = `/api/analyze?league=${encodeURIComponent(league)}&league_slug=${encodeURIComponent(leagueSlug)}&home_id=${selected.home.id}&away_id=${selected.away.id}&home_name=${encodeURIComponent(selected.home.name)}&away_name=${encodeURIComponent(selected.away.name)}`;
+        const url = `/api/analyze?league=${encodeURIComponent(league)}&home_slug=${encodeURIComponent(selected.home.leagueSlug||'')}&away_slug=${encodeURIComponent(selected.away.leagueSlug||'')}&home_id=${selected.home.id}&away_id=${selected.away.id}&home_name=${encodeURIComponent(selected.home.name)}&away_name=${encodeURIComponent(selected.away.name)}`;
         const res = await fetch(url);
         const data = await res.json();
         if (data.error) { resultContent.innerHTML = `<div class="error-box">❌ ${data.error}</div>`; return; }

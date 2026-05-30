@@ -61,12 +61,14 @@ def analyze():
     away_id = request.args.get("away_id")
     home_name = request.args.get("home_name", "Local")
     away_name = request.args.get("away_name", "Visitante")
-    raw_slug = request.args.get("league_slug", "")
-    # Si el slug contiene espacios o mayúsculas es un nombre, no un slug real
-    league_slug = raw_slug if (raw_slug and "." in raw_slug) else LEAGUES.get(league_name, "eng.1")
+    def valid_slug(s):
+        return s if (s and "." in s) else None
+
+    home_slug = valid_slug(request.args.get("home_slug", "")) or LEAGUES.get(league_name, "eng.1")
+    away_slug = valid_slug(request.args.get("away_slug", "")) or LEAGUES.get(league_name, "eng.1")
 
     try:
-        result = analyze_match(league_slug, home_id, away_id, home_name, away_name)
+        result = analyze_match(home_slug, away_slug, home_id, away_id, home_name, away_name)
         return jsonify(result)
     except Exception as ex:
         return jsonify({"error": str(ex)}), 500
