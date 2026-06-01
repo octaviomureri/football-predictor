@@ -92,3 +92,20 @@ def search_teams_across_leagues(query):
         except Exception:
             continue
     return results
+
+
+def get_team_injuries(team_id, league_slug):
+    """Retorna lista de nombres de jugadores lesionados/suspendidos del equipo."""
+    try:
+        data = get(f"{league_slug}/injuries")
+        injured = []
+        for entry in data.get("injuries", []):
+            if entry.get("team", {}).get("id") != str(team_id):
+                continue
+            for injury in entry.get("injuries", []):
+                name = injury.get("athlete", {}).get("displayName", "")
+                if name:
+                    injured.append(name)
+        return injured
+    except Exception:
+        return []
