@@ -8,6 +8,9 @@ from claude_insight import get_match_insight
 
 app = Flask(__name__, template_folder="../templates")
 
+def _valid_slug(s):
+    return s if (s and "." in s) else None
+
 @app.route("/")
 def index():
     return render_template("index.html", leagues=list(LEAGUES.keys()))
@@ -62,11 +65,8 @@ def analyze():
     away_id = request.args.get("away_id")
     home_name = request.args.get("home_name", "Local")
     away_name = request.args.get("away_name", "Visitante")
-    def valid_slug(s):
-        return s if (s and "." in s) else None
-
-    home_slug = valid_slug(request.args.get("home_slug", "")) or LEAGUES.get(league_name, "eng.1")
-    away_slug = valid_slug(request.args.get("away_slug", "")) or LEAGUES.get(league_name, "eng.1")
+    home_slug = _valid_slug(request.args.get("home_slug", "")) or LEAGUES.get(league_name, "eng.1")
+    away_slug = _valid_slug(request.args.get("away_slug", "")) or LEAGUES.get(league_name, "eng.1")
 
     try:
         result = analyze_match(home_slug, away_slug, home_id, away_id, home_name, away_name)
@@ -82,10 +82,8 @@ def match_insight():
     away_id = request.args.get("away_id")
     home_name = request.args.get("home_name", "Local")
     away_name = request.args.get("away_name", "Visitante")
-    def valid_slug(s):
-        return s if (s and "." in s) else None
-    home_slug = valid_slug(request.args.get("home_slug", "")) or LEAGUES.get(league_name, "eng.1")
-    away_slug = valid_slug(request.args.get("away_slug", "")) or LEAGUES.get(league_name, "eng.1")
+    home_slug = _valid_slug(request.args.get("home_slug", "")) or LEAGUES.get(league_name, "eng.1")
+    away_slug = _valid_slug(request.args.get("away_slug", "")) or LEAGUES.get(league_name, "eng.1")
 
     try:
         analysis = analyze_match(home_slug, away_slug, home_id, away_id, home_name, away_name)
