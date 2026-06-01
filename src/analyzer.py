@@ -76,6 +76,7 @@ def analyze_schedule(events, team_id, league_slug, last=10):
     results = []
     gf_list, ga_list = [], []
     shots_list, shots_on_list, fouls_list, possession_list = [], [], [], []
+    corners_list, yellow_cards_list = [], []
     all_goals = {}
     all_assists = {}
     all_cards = {}
@@ -124,6 +125,10 @@ def analyze_schedule(events, team_id, league_slug, last=10):
                 fouls_list.append(team_stats["foulsCommitted"])
             if "possessionPct" in team_stats:
                 possession_list.append(team_stats["possessionPct"])
+            if "cornersKicked" in team_stats:
+                corners_list.append(team_stats["cornersKicked"])
+            if "yellowCards" in team_stats:
+                yellow_cards_list.append(team_stats["yellowCards"])
 
             # Stats por jugador
             g, a, c = extract_player_stats_from_summary(summary, team_id)
@@ -154,6 +159,8 @@ def analyze_schedule(events, team_id, league_slug, last=10):
         "avg_shots": avg(shots_list),
         "avg_shots_on": avg(shots_on_list),
         "avg_fouls": avg(fouls_list),
+        "avg_corners": avg(corners_list),
+        "avg_yellow_cards": avg(yellow_cards_list),
         "matches_analyzed": matches,
         "competitions_count": len(competitions),
         "top_scorers": [{"name": n, "goals": g} for n, g in sorted(all_goals.items(), key=lambda x: -x[1])[:5]],
