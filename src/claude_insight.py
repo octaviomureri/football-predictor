@@ -58,7 +58,10 @@ Basándote en los datos anteriores, devuelve este JSON exacto:
 
 def generate_insight(prompt):
     try:
-        client = anthropic.Anthropic()
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        if not api_key:
+            return {"error": "Variable ANTHROPIC_API_KEY no encontrada en el servidor. Verificá que esté configurada en Railway con ese nombre exacto."}
+        client = anthropic.Anthropic(api_key=api_key)
         message = client.messages.create(
             model=MODEL,
             max_tokens=1024,
