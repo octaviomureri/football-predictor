@@ -1,4 +1,4 @@
-import os, json
+import os, json, re
 import anthropic
 from dotenv import load_dotenv
 
@@ -24,7 +24,7 @@ def build_prompt(home_name, away_name, home_form, away_form, h2h, home_injured, 
 - Asistidores: {top_assists}
 - Lesionados/suspendidos: {injured_str}"""
 
-    h2h_str = f"Últimos {h2h['total']} enfrentamientos: {home_name} ganó {h2h['home_wins']}, empates {h2h['draws']}, {away_name} ganó {h2h['away_wins']}" if h2h["total"] > 0 else "Sin historial H2H disponible"
+    h2h_str = f"Últimos {h2h.get('total', 0)} enfrentamientos: {home_name} ganó {h2h.get('home_wins', 0)}, empates {h2h.get('draws', 0)}, {away_name} ganó {h2h.get('away_wins', 0)}" if h2h.get("total", 0) > 0 else "Sin historial H2H disponible"
     alerts_str = "\n".join(f"- {a}" for a in alerts) if alerts else "Ninguna"
 
     return f"""Eres un analista de fútbol experto. Analiza este partido y responde ÚNICAMENTE con un JSON válido, sin texto adicional.
@@ -66,10 +66,9 @@ def generate_insight(prompt):
         )
         raw = message.content[0].text.strip()
         # Limpiar posibles bloques de código markdown
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
+        raw = re.sub(r'^```(?:json)?\s*', '', raw)
+        raw = re.sub(r'\s*```$', '', raw)
+        raw = raw.strip()
         return json.loads(raw)
     except Exception as e:
         return {"error": str(e)}
