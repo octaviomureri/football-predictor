@@ -2,8 +2,9 @@ import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 
 from flask import Flask, render_template, request, jsonify
-from api_client import get_scoreboard, get_teams, search_teams_across_leagues, LEAGUES
+from api_client import get_scoreboard, get_teams, search_teams_across_leagues, LEAGUES, get_team_injuries
 from analyzer import analyze_match
+from claude_insight import get_match_insight
 
 app = Flask(__name__, template_folder="../templates")
 
@@ -70,6 +71,37 @@ def analyze():
     try:
         result = analyze_match(home_slug, away_slug, home_id, away_id, home_name, away_name)
         return jsonify(result)
+    except Exception as ex:
+        return jsonify({"error": str(ex)}), 500
+
+
+@app.route("/api/match-insight")
+def match_insight():
+    league_name = request.args.get("league", "Premier League")
+    home_id = request.args.get("home_id")
+    away_id = request.args.get("away_id")
+    home_name = request.args.get("home_name", "Local")
+    away_name = request.args.get("away_name", "Visitante")
+    def valid_slug(s):
+        return s if (s and "." in s) else None
+    home_slug = valid_slug(request.args.get("home_slug", "")) or LEAGUES.get(league_name, "eng.1")
+    away_slug = valid_slug(request.args.get("away_slug", "")) or LEAGUES.get(league_name, "eng.1")
+
+    try:
+        analysis = analyze_match(home_slug, away_slug, home_id, away_id, home_name, away_name)
+        home_injured = get_team_injuries(home_id, home_slug)
+        away_injured = get_team_injuries(away_id, away_slug)
+        insight = get_match_insight(
+            home_name=home_name,
+            away_name=away_name,
+            home_form=analysis["home_form"],
+            away_form=analysis["away_form"],
+            h2h=analysis["h2h"],
+            home_injured=home_injured,
+            away_injured=away_injured,
+            alerts=analysis["mood_alerts"],
+        )
+        return jsonify(insight)
     except Exception as ex:
         return jsonify({"error": str(ex)}), 500
 
