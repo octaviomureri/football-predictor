@@ -16,6 +16,7 @@ LEAGUES = {
     "Copa Libertadores": "conmebol.libertadores",
     "Copa Sudamericana": "conmebol.sudamericana",
     "Mundial":           "fifa.world",
+    "Amistosos Internacionales": "fifa.friendly",
 }
 
 # Ligas europeas que compiten en Champions/Europa
