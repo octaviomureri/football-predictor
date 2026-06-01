@@ -94,8 +94,10 @@ def search_teams_across_leagues(query):
     return results
 
 
+UNAVAILABLE_STATUSES = {"Out", "Doubtful", "Suspended"}
+
 def get_team_injuries(team_id, league_slug):
-    """Retorna lista de nombres de jugadores lesionados/suspendidos del equipo."""
+    """Returns list of player names that are Out, Doubtful, or Suspended."""
     try:
         data = get(f"{league_slug}/injuries")
         injured = []
@@ -103,6 +105,9 @@ def get_team_injuries(team_id, league_slug):
             if entry.get("team", {}).get("id") != str(team_id):
                 continue
             for injury in entry.get("injuries", []):
+                status = injury.get("status", "")
+                if status not in UNAVAILABLE_STATUSES:
+                    continue
                 name = injury.get("athlete", {}).get("displayName", "")
                 if name:
                     injured.append(name)
