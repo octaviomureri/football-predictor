@@ -75,29 +75,32 @@ def analyze():
         return jsonify({"error": str(ex)}), 500
 
 
-@app.route("/api/match-insight")
+@app.route("/api/match-insight", methods=["POST"])
 def match_insight():
-    league_name = request.args.get("league", "Premier League")
-    home_id = request.args.get("home_id")
-    away_id = request.args.get("away_id")
-    home_name = request.args.get("home_name", "Local")
-    away_name = request.args.get("away_name", "Visitante")
-    home_slug = _valid_slug(request.args.get("home_slug", "")) or LEAGUES.get(league_name, "eng.1")
-    away_slug = _valid_slug(request.args.get("away_slug", "")) or LEAGUES.get(league_name, "eng.1")
+    body = request.get_json(silent=True) or {}
+    home_name = body.get("home_name", "Local")
+    away_name = body.get("away_name", "Visitante")
+    home_id = body.get("home_id")
+    away_id = body.get("away_id")
+    home_slug = body.get("home_slug", "eng.1")
+    away_slug = body.get("away_slug", "eng.1")
+    home_form = body.get("home_form", {})
+    away_form = body.get("away_form", {})
+    h2h = body.get("h2h", {})
+    alerts = body.get("alerts", [])
 
     try:
-        analysis = analyze_match(home_slug, away_slug, home_id, away_id, home_name, away_name)
         home_injured = get_team_injuries(home_id, home_slug)
         away_injured = get_team_injuries(away_id, away_slug)
         insight = get_match_insight(
             home_name=home_name,
             away_name=away_name,
-            home_form=analysis["home_form"],
-            away_form=analysis["away_form"],
-            h2h=analysis["h2h"],
+            home_form=home_form,
+            away_form=away_form,
+            h2h=h2h,
             home_injured=home_injured,
             away_injured=away_injured,
-            alerts=analysis["mood_alerts"],
+            alerts=alerts,
         )
         return jsonify(insight)
     except Exception as ex:

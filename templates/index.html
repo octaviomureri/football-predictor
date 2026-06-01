@@ -205,6 +205,10 @@
     const selected = { home: null, away: null };
     let searchTimers = {};
 
+    function escHtml(s) {
+      return String(s || '—').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
     function searchTeam(side) {
       clearTimeout(searchTimers[side]);
       const q = document.getElementById(side + 'Input').value;
@@ -295,15 +299,23 @@
 
       try {
         const url = `/api/analyze?league=${encodeURIComponent(league)}&home_slug=${encodeURIComponent(selected.home.leagueSlug||'')}&away_slug=${encodeURIComponent(selected.away.leagueSlug||'')}&home_id=${selected.home.id}&away_id=${selected.away.id}&home_name=${encodeURIComponent(selected.home.name)}&away_name=${encodeURIComponent(selected.away.name)}`;
-        const insightParams = `league=${encodeURIComponent(league)}&home_slug=${encodeURIComponent(selected.home.leagueSlug||'')}&away_slug=${encodeURIComponent(selected.away.leagueSlug||'')}&home_id=${selected.home.id}&away_id=${selected.away.id}&home_name=${encodeURIComponent(selected.home.name)}&away_name=${encodeURIComponent(selected.away.name)}`;
-
-        const [res] = await Promise.all([
-          fetch(url),
-          loadInsight(insightParams),
-        ]);
+        const res = await fetch(url);
         const data = await res.json();
         if (data.error) { resultContent.innerHTML = `<div class="error-box">❌ ${data.error}</div>`; return; }
         renderResult(data);
+        // Fire insight request after analysis is rendered, passing data to avoid re-fetching
+        loadInsight({
+          home_name: selected.home.name,
+          away_name: selected.away.name,
+          home_id: selected.home.id,
+          away_id: selected.away.id,
+          home_slug: selected.home.leagueSlug || '',
+          away_slug: selected.away.leagueSlug || '',
+          home_form: data.home_form,
+          away_form: data.away_form,
+          h2h: data.h2h,
+          alerts: data.mood_alerts,
+        });
       } catch(e) {
         resultContent.innerHTML = `<div class="error-box">❌ Error: ${e.message}</div>`;
       }
@@ -463,17 +475,21 @@
       return [...(form||'')].map(r => `<span class="${r}">${r}</span>`).join('');
     }
 
-    async function loadInsight(params) {
+    async function loadInsight(analysisData) {
       const insightCard = document.getElementById('insightCard');
       const insightContent = document.getElementById('insightContent');
       insightCard.classList.add('visible');
       insightContent.innerHTML = '<div class="loading-box"><div class="spinner"></div><div style="margin-top:12px;color:#888;font-size:0.82rem">Generando análisis táctico con IA...</div></div>';
 
       try {
-        const res = await fetch(`/api/match-insight?${params}`);
+        const res = await fetch('/api/match-insight', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(analysisData),
+        });
         const data = await res.json();
         if (data.error) {
-          insightContent.innerHTML = `<div class="insight-error">⚠️ Análisis táctico no disponible: ${data.error}</div>`;
+          insightContent.innerHTML = `<div class="insight-error">⚠️ Análisis táctico no disponible: ${escHtml(data.error)}</div>`;
           return;
         }
         renderInsight(data);
@@ -483,26 +499,26 @@
     }
 
     function renderInsight(d) {
-      const picks = (d.parlay?.picks || []).map(p => `<div class="parlay-pick">${p}</div>`).join('');
+      const picks = (d.parlay?.picks || []).map(p => `<div class="parlay-pick">${escHtml(p)}</div>`).join('');
       document.getElementById('insightContent').innerHTML = `
         <div class="style-grid">
           <div class="style-box">
             <div class="slabel">Estilo — ${selected.home?.name || 'Local'}</div>
-            <div class="stext">${d.estilo_local || '—'}</div>
+            <div class="stext">${escHtml(d.estilo_local)}</div>
           </div>
           <div class="style-box">
             <div class="slabel">Estilo — ${selected.away?.name || 'Visitante'}</div>
-            <div class="stext">${d.estilo_visitante || '—'}</div>
+            <div class="stext">${escHtml(d.estilo_visitante)}</div>
           </div>
         </div>
         <div class="development-box">
           <div class="dlabel">Cómo se desarrollará el partido</div>
-          <div class="dtext">${d.desarrollo_partido || '—'}</div>
+          <div class="dtext">${escHtml(d.desarrollo_partido)}</div>
         </div>
         <div class="predictions-grid">
           <div class="pred-insight-box">
             <div class="pilabel">Resultado probable</div>
-            <div class="pivalue" style="font-size:0.95rem">${d.resultado_probable || '—'}</div>
+            <div class="pivalue" style="font-size:0.95rem">${escHtml(d.resultado_probable)}</div>
           </div>
           <div class="pred-insight-box">
             <div class="pilabel">⚽ Corners</div>
@@ -518,7 +534,7 @@
         <div class="parlay-box">
           <div class="parlabel">🎯 Parlay sugerido</div>
           ${picks}
-          <div class="parlay-reason">${d.parlay?.razon || ''}</div>
+          <div class="parlay-reason">${escHtml(d.parlay?.razon)}</div>
         </div>
       `;
     }
