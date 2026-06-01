@@ -58,7 +58,7 @@ Basándote en los datos anteriores, devuelve este JSON exacto:
 
 def generate_insight(prompt):
     try:
-        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        client = anthropic.Anthropic()
         message = client.messages.create(
             model=MODEL,
             max_tokens=1024,
