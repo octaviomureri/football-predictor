@@ -57,7 +57,8 @@ def test_generate_insight_returns_parsed_json():
     mock_client.messages.create.return_value.content = [
         MagicMock(text=json.dumps(expected))
     ]
-    with patch('claude_insight.anthropic.Anthropic', return_value=mock_client):
+    with patch('claude_insight.anthropic.Anthropic', return_value=mock_client), \
+         patch.dict('os.environ', {'ANTHROPIC_API_KEY': 'sk-test-key'}):
         result = generate_insight("prompt de prueba")
     assert result["resultado_probable"] == "River 1-0 Boca"
     assert result["corners"]["pick"] == 8.5
