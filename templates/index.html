@@ -108,6 +108,29 @@
     .loading-box { text-align: center; padding: 32px; color: #888; }
     .error-box { background: #2a1a1a; border-left: 3px solid #f44336; border-radius: 8px; padding: 14px; color: #ff8a80; font-size: 0.88rem; }
     .section-divider { border: none; border-top: 1px solid #2a2d3e; margin: 16px 0; }
+
+    /* Tactical Insight */
+    .insight-card { background: #1a1d27; border-radius: 14px; padding: 24px; border: 1px solid #2a2d3e; margin-top: 16px; display: none; }
+    .insight-card.visible { display: block; }
+    .insight-title { font-size: 0.85rem; font-weight: 700; color: #a78bfa; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 18px; display: flex; align-items: center; gap: 8px; }
+    .style-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    .style-box { background: #0f1117; border-radius: 10px; padding: 14px; }
+    .style-box .slabel { font-size: 0.7rem; color: #777; margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+    .style-box .stext { font-size: 0.82rem; color: #ccc; line-height: 1.5; }
+    .development-box { background: #0f1117; border-radius: 10px; padding: 14px; margin-bottom: 14px; }
+    .development-box .dlabel { font-size: 0.7rem; color: #777; margin-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+    .development-box .dtext { font-size: 0.85rem; color: #ddd; line-height: 1.6; }
+    .predictions-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+    .pred-insight-box { background: #0f1117; border-radius: 10px; padding: 14px; text-align: center; }
+    .pred-insight-box .pilabel { font-size: 0.7rem; color: #777; margin-bottom: 6px; }
+    .pred-insight-box .pivalue { font-size: 1.1rem; font-weight: 700; color: #fff; }
+    .pred-insight-box .pirange { font-size: 0.72rem; color: #555; margin-top: 4px; }
+    .parlay-box { background: linear-gradient(135deg, #1a2a1a, #0f1a0f); border-radius: 10px; padding: 16px; border: 1px solid #2a4a2a; }
+    .parlay-box .parlabel { font-size: 0.72rem; color: #4caf50; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+    .parlay-pick { font-size: 0.85rem; color: #ccc; padding: 4px 0; display: flex; align-items: center; gap: 6px; }
+    .parlay-pick::before { content: "✓"; color: #4caf50; font-weight: 700; }
+    .parlay-reason { font-size: 0.78rem; color: #888; margin-top: 10px; padding-top: 10px; border-top: 1px solid #2a4a2a; line-height: 1.5; }
+    .insight-error { background: #1a1a2a; border-left: 3px solid #a78bfa; border-radius: 8px; padding: 12px; color: #888; font-size: 0.82rem; }
   </style>
 </head>
 <body>
@@ -170,6 +193,12 @@
         <div id="resultContent"></div>
       </div>
     </div>
+
+    <!-- Insight táctico -->
+    <div class="insight-card" id="insightCard">
+      <div class="insight-title">🧠 Análisis Táctico &amp; Apuesta Sugerida</div>
+      <div id="insightContent"></div>
+    </div>
   </div>
 
   <script>
@@ -212,6 +241,7 @@
 
     function resetFlow() {
       document.getElementById('step2Card').style.display = 'none';
+      document.getElementById('insightCard').classList.remove('visible');
     }
 
     function selectFixture(homeId, homeName, homeLogo, awayId, awayName, awayLogo, leagueSlug) {
@@ -265,7 +295,12 @@
 
       try {
         const url = `/api/analyze?league=${encodeURIComponent(league)}&home_slug=${encodeURIComponent(selected.home.leagueSlug||'')}&away_slug=${encodeURIComponent(selected.away.leagueSlug||'')}&home_id=${selected.home.id}&away_id=${selected.away.id}&home_name=${encodeURIComponent(selected.home.name)}&away_name=${encodeURIComponent(selected.away.name)}`;
-        const res = await fetch(url);
+        const insightParams = `league=${encodeURIComponent(league)}&home_slug=${encodeURIComponent(selected.home.leagueSlug||'')}&away_slug=${encodeURIComponent(selected.away.leagueSlug||'')}&home_id=${selected.home.id}&away_id=${selected.away.id}&home_name=${encodeURIComponent(selected.home.name)}&away_name=${encodeURIComponent(selected.away.name)}`;
+
+        const [res] = await Promise.all([
+          fetch(url),
+          loadInsight(insightParams),
+        ]);
         const data = await res.json();
         if (data.error) { resultContent.innerHTML = `<div class="error-box">❌ ${data.error}</div>`; return; }
         renderResult(data);
@@ -426,6 +461,66 @@
 
     function renderForm(form) {
       return [...(form||'')].map(r => `<span class="${r}">${r}</span>`).join('');
+    }
+
+    async function loadInsight(params) {
+      const insightCard = document.getElementById('insightCard');
+      const insightContent = document.getElementById('insightContent');
+      insightCard.classList.add('visible');
+      insightContent.innerHTML = '<div class="loading-box"><div class="spinner"></div><div style="margin-top:12px;color:#888;font-size:0.82rem">Generando análisis táctico con IA...</div></div>';
+
+      try {
+        const res = await fetch(`/api/match-insight?${params}`);
+        const data = await res.json();
+        if (data.error) {
+          insightContent.innerHTML = `<div class="insight-error">⚠️ Análisis táctico no disponible: ${data.error}</div>`;
+          return;
+        }
+        renderInsight(data);
+      } catch(e) {
+        insightContent.innerHTML = `<div class="insight-error">⚠️ No se pudo cargar el análisis táctico</div>`;
+      }
+    }
+
+    function renderInsight(d) {
+      const picks = (d.parlay?.picks || []).map(p => `<div class="parlay-pick">${p}</div>`).join('');
+      document.getElementById('insightContent').innerHTML = `
+        <div class="style-grid">
+          <div class="style-box">
+            <div class="slabel">Estilo — ${selected.home?.name || 'Local'}</div>
+            <div class="stext">${d.estilo_local || '—'}</div>
+          </div>
+          <div class="style-box">
+            <div class="slabel">Estilo — ${selected.away?.name || 'Visitante'}</div>
+            <div class="stext">${d.estilo_visitante || '—'}</div>
+          </div>
+        </div>
+        <div class="development-box">
+          <div class="dlabel">Cómo se desarrollará el partido</div>
+          <div class="dtext">${d.desarrollo_partido || '—'}</div>
+        </div>
+        <div class="predictions-grid">
+          <div class="pred-insight-box">
+            <div class="pilabel">Resultado probable</div>
+            <div class="pivalue" style="font-size:0.95rem">${d.resultado_probable || '—'}</div>
+          </div>
+          <div class="pred-insight-box">
+            <div class="pilabel">⚽ Corners</div>
+            <div class="pivalue">+${d.corners?.pick ?? '—'}</div>
+            <div class="pirange">Rango: ${d.corners?.min ?? '—'}–${d.corners?.max ?? '—'}</div>
+          </div>
+          <div class="pred-insight-box">
+            <div class="pilabel">🟨 Amarillas</div>
+            <div class="pivalue">+${d.amarillas?.pick ?? '—'}</div>
+            <div class="pirange">Rango: ${d.amarillas?.min ?? '—'}–${d.amarillas?.max ?? '—'}</div>
+          </div>
+        </div>
+        <div class="parlay-box">
+          <div class="parlabel">🎯 Parlay sugerido</div>
+          ${picks}
+          <div class="parlay-reason">${d.parlay?.razon || ''}</div>
+        </div>
+      `;
     }
   </script>
 </body>
