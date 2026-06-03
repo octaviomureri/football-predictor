@@ -1,4 +1,4 @@
-import os, logging, asyncio
+import os, sys, logging, asyncio
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -6,7 +6,6 @@ from telegram.ext import (
 )
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 from bot_api import get_fixtures, get_analysis, get_insight
 from bot_formatter import format_fixtures_list, format_insight_message, format_no_fixtures
@@ -50,16 +49,33 @@ def _league_slug(league: str) -> str:
     }
     return mapping.get(league, "eng.1")
 
+def _sanitise(s: str) -> str:
+    """Elimina | de strings para evitar corrupción en callback_data."""
+    return str(s).replace("|", "-")
+
 def _fixture_callback(league: str, fixture: dict) -> str:
     """Genera el callback_data para un botón de partido."""
     slug = _league_slug(league)
     parts = [
-        "partido", league,
-        str(fixture["home_id"]), str(fixture["away_id"]),
-        fixture["home_name"], fixture["away_name"],
-        slug, slug,
+        "partido", _sanitise(league),
+        _sanitise(fixture["home_id"]), _sanitise(fixture["away_id"]),
+        _sanitise(fixture["home_name"]), _sanitise(fixture["away_name"]),
+        _sanitise(slug), _sanitise(slug),
     ]
     return "|".join(parts)
+
+
+def _build_liga_keyboard() -> InlineKeyboardMarkup:
+    """Construye el teclado inline de selección de liga."""
+    keyboard, row = [], []
+    for liga in LIGAS:
+        row.append(InlineKeyboardButton(liga, callback_data=f"liga|{liga}"))
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
+    return InlineKeyboardMarkup(keyboard)
 
 
 # ── Handlers del bot privado ──────────────────────────────────────────────────
@@ -78,18 +94,9 @@ async def cmd_ayuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_partidos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Muestra teclado de selección de liga."""
-    keyboard = []
-    row = []
-    for i, liga in enumerate(LIGAS):
-        row.append(InlineKeyboardButton(liga, callback_data=f"liga|{liga}"))
-        if len(row) == 2:
-            keyboard.append(row)
-            row = []
-    if row:
-        keyboard.append(row)
     await update.message.reply_text(
         "¿Qué liga querés ver?",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        reply_markup=_build_liga_keyboard(),
     )
 
 async def cb_liga(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -124,6 +131,9 @@ async def cb_partido(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     parts = query.data.split("|")
     # partido|league|home_id|away_id|home_name|away_name|home_slug|away_slug
+    if len(parts) != 8:
+        await query.edit_message_text("⚠️ Datos inválidos. Intentá de nuevo con /partidos.")
+        return
     _, league, home_id, away_id, home_name, away_name, home_slug, away_slug = parts
 
     await query.edit_message_text(
@@ -155,18 +165,9 @@ async def cb_volver_ligas(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Volver al menú de selección de ligas."""
     query = update.callback_query
     await query.answer()
-    keyboard = []
-    row = []
-    for i, liga in enumerate(LIGAS):
-        row.append(InlineKeyboardButton(liga, callback_data=f"liga|{liga}"))
-        if len(row) == 2:
-            keyboard.append(row)
-            row = []
-    if row:
-        keyboard.append(row)
     await query.edit_message_text(
         "¿Qué liga querés ver?",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        reply_markup=_build_liga_keyboard(),
     )
 
 
@@ -233,13 +234,15 @@ def main():
     # Scheduler: 9AM y 12PM hora Argentina (UTC-3)
     scheduler = AsyncIOScheduler(timezone="America/Argentina/Buenos_Aires")
     scheduler.add_job(
-        lambda: asyncio.ensure_future(publicar_partidos_del_dia(app.bot)),
+        publicar_partidos_del_dia,
         CronTrigger(hour=9, minute=0),
+        args=[app.bot],
         id="publicar_9am",
     )
     scheduler.add_job(
-        lambda: asyncio.ensure_future(publicar_partidos_del_dia(app.bot)),
+        publicar_partidos_del_dia,
         CronTrigger(hour=12, minute=0),
+        args=[app.bot],
         id="publicar_12pm",
     )
     scheduler.start()
