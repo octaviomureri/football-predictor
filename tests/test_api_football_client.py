@@ -92,3 +92,16 @@ def test_get_team_events_returns_empty_on_exception():
     with patch('api_football_client._get', side_effect=Exception("API down")):
         result = get_team_events("River Plate", "af:130")
     assert result == []
+
+def test_get_team_events_returns_events_on_success():
+    with patch('api_football_client._get') as mock_get:
+        # First call: teams search
+        mock_get.side_effect = [
+            _mock_teams_response("42"),       # find_team_id call
+            _mock_fixtures_response(),         # fixtures call
+            _mock_stats_response("42"),        # stats for fixture 999
+        ]
+        result = get_team_events("River Plate", "af:130")
+    assert len(result) == 1
+    assert result[0]["id"] == "af_999"
+    assert result[0]["_source"] == "api_football"

@@ -58,6 +58,7 @@ def _get_fixture_stats(fixture_id, af_team_id):
                 except (ValueError, TypeError):
                     pass
             return stats
+        return {}
     except Exception:
         return {}
 
