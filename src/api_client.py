@@ -13,6 +13,7 @@ LEAGUES = {
     "Europa League":     "uefa.europa",
     "Brasileirao":       "bra.1",
     "Liga Argentina":    "arg.1",
+    "Copa Argentina":    "af:130",
     "Copa Libertadores": "conmebol.libertadores",
     "Copa Sudamericana": "conmebol.sudamericana",
     "Mundial":           "fifa.world",
