@@ -155,7 +155,11 @@ def analyze_schedule(events, team_id, league_slug, last=10):
         if not home_comp or not away_comp:
             continue
 
-        is_home = home_comp["team"]["id"] == str(team_id)
+        # API-Football events mark the target team with _is_target; ESPN events use team_id
+        if home_comp.get("_is_target") or away_comp.get("_is_target"):
+            is_home = bool(home_comp.get("_is_target"))
+        else:
+            is_home = home_comp["team"]["id"] == str(team_id)
         my = home_comp if is_home else away_comp
         opp = away_comp if is_home else home_comp
 
@@ -174,7 +178,7 @@ def analyze_schedule(events, team_id, league_slug, last=10):
         try:
             comp = e["competitions"][0]
             # Eventos de API-Football traen _stats directamente
-            if "_stats" in comp and comp["_stats"]:
+            if "_stats" in comp:
                 team_stats = comp["_stats"]
                 summary = {}
             else:

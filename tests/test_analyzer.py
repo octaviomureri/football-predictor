@@ -105,8 +105,17 @@ def test_get_all_team_events_fallback_when_espn_insufficient():
         ]}]
     }
 
+    espn_event2 = {
+        "id": "esp_2",
+        "date": "2025-04-15T00:00:00Z",
+        "_league_slug": "arg.1",
+        "competitions": [{"status": {"type": {"completed": True}}, "competitors": [
+            {"homeAway": "home", "team": {"id": "42"}, "score": "0", "winner": False},
+            {"homeAway": "away", "team": {"id": "99"}, "score": "1", "winner": True},
+        ]}]
+    }
     mock_schedule = MagicMock()
-    mock_schedule.return_value = {"events": [espn_event, espn_event]}  # solo 2
+    mock_schedule.return_value = {"events": [espn_event, espn_event2]}  # 2 distinct events
 
     with patch('api_client.get_team_schedule', mock_schedule), \
          patch('api_football_client.get_team_events', return_value=[af_event]):
