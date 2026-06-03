@@ -113,11 +113,15 @@ async def cb_liga(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(format_no_fixtures(league), parse_mode="Markdown")
         return
 
+    # Guardar fixtures en user_data para evitar el límite de 64 bytes en callback_data
+    context.user_data["fixtures"] = fixtures
+    context.user_data["league"] = league
+
     text = format_fixtures_list(fixtures, league)
     keyboard = []
-    for f in fixtures:
+    for i, f in enumerate(fixtures):
         label = f"{f['home_name']} vs {f['away_name']}"
-        keyboard.append([InlineKeyboardButton(label, callback_data=_fixture_callback(league, f))])
+        keyboard.append([InlineKeyboardButton(label, callback_data=f"partido|{i}")])
     keyboard.append([InlineKeyboardButton("🔙 Volver a ligas", callback_data="volver_ligas")])
 
     await query.edit_message_text(
@@ -131,12 +135,20 @@ async def cb_partido(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    parts = query.data.split("|")
-    # partido|league|home_id|away_id|home_name|away_name|home_slug|away_slug
-    if len(parts) != 8:
-        await query.edit_message_text("⚠️ Datos inválidos. Intentá de nuevo con /partidos.")
+    idx = int(query.data.split("|")[1])
+    fixtures = context.user_data.get("fixtures", [])
+    league = context.user_data.get("league", "")
+
+    if not fixtures or idx >= len(fixtures):
+        await query.edit_message_text("⚠️ Datos expirados. Intentá de nuevo con /partidos.")
         return
-    _, league, home_id, away_id, home_name, away_name, home_slug, away_slug = parts
+
+    f = fixtures[idx]
+    home_id = str(f["home_id"])
+    away_id = str(f["away_id"])
+    home_name = f["home_name"]
+    away_name = f["away_name"]
+    slug = _league_slug(league)
 
     await query.edit_message_text(
         f"⏳ Generando análisis para *{home_name} vs {away_name}*...\n"
@@ -144,7 +156,7 @@ async def cb_partido(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown",
     )
 
-    analysis = get_analysis(league, home_slug, away_slug, home_id, away_id, home_name, away_name)
+    analysis = get_analysis(league, slug, slug, home_id, away_id, home_name, away_name)
     if not analysis:
         await query.edit_message_text(
             f"⚠️ No se pudo obtener el análisis para *{home_name} vs {away_name}*.",
@@ -152,7 +164,7 @@ async def cb_partido(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    insight = get_insight(analysis, home_name, away_name, home_id, away_id, home_slug, away_slug)
+    insight = get_insight(analysis, home_name, away_name, home_id, away_id, slug, slug)
     if not insight:
         await query.edit_message_text(
             f"⚠️ Análisis táctico no disponible para *{home_name} vs {away_name}*.",
