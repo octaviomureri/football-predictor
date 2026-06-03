@@ -68,3 +68,15 @@ def test_generate_insight_returns_error_dict_on_failure():
     with patch('claude_insight.anthropic.Anthropic', side_effect=Exception("API error")):
         result = generate_insight("prompt")
     assert "error" in result
+
+def test_build_prompt_contains_conservative_instruction():
+    from claude_insight import build_prompt
+    prompt = build_prompt(
+        home_name="River", away_name="Boca",
+        home_form=_sample_form(), away_form=_sample_form(),
+        h2h={"home_wins": 1, "away_wins": 1, "draws": 1, "total": 3},
+        home_injured=[], away_injured=[],
+        alerts=[]
+    )
+    assert "conservador" in prompt.lower()
+    assert "1.20" in prompt or "1.50" in prompt

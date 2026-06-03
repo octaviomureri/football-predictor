@@ -50,10 +50,12 @@ Basándote en los datos anteriores, devuelve este JSON exacto:
   "corners": {{"min": <entero>, "max": <entero>, "pick": <número con .5>}},
   "amarillas": {{"min": <entero>, "max": <entero>, "pick": <número con .5>}},
   "parlay": {{
-    "picks": ["<pick 1>", "<pick 2>", "<pick 3>"],
+    "picks": ["<pick 1>", "<pick 2>"],
     "razon": "<2-3 oraciones justificando la combinada>"
   }}
-}}"""
+}}
+
+Para el parlay, sé conservador: elegí picks de alta probabilidad (equivalente a cuotas implícitas 1.20–1.50), preferí mercados simples (resultado 1X2 u over/under goles totales), usá máximo 2 picks en la combinada, y evitá combinar eventos correlacionados. Justificá brevemente por qué cada pick tiene alta probabilidad de ocurrir."""
 
 
 def generate_insight(prompt):
