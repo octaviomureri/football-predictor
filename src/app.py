@@ -19,6 +19,9 @@ def index():
 def next_fixtures():
     league_name = request.args.get("league", "Premier League")
     slug = LEAGUES[league_name]
+    # Ligas af: van a API-Football, no tienen scoreboard en ESPN
+    if slug.startswith("af:"):
+        return jsonify([])
     try:
         data = get_scoreboard(slug, limit=15)
         events = data.get("events", [])
