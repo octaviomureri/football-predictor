@@ -24,6 +24,7 @@ LIGAS = [
     "Bundesliga", "Ligue 1", "Champions League",
     "Europa League", "Liga Argentina", "Brasileirao",
     "Copa Argentina", "Copa Libertadores",
+    "Mundial", "Amistosos Internacionales",
 ]
 
 # Ligas para publicación automática en el canal
@@ -46,6 +47,7 @@ def _league_slug(league: str) -> str:
         "Champions League": "uefa.champions", "Europa League": "uefa.europa",
         "Liga Argentina": "arg.1", "Brasileirao": "bra.1",
         "Copa Argentina": "af:130", "Copa Libertadores": "conmebol.libertadores",
+        "Mundial": "fifa.world", "Amistosos Internacionales": "fifa.friendly",
     }
     return mapping.get(league, "eng.1")
 
@@ -217,21 +219,8 @@ async def publicar_partidos_del_dia(bot):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main():
-    if not BOT_TOKEN:
-        raise ValueError("TELEGRAM_BOT_TOKEN no configurado")
-
-    app = Application.builder().token(BOT_TOKEN).build()
-
-    # Handlers
-    app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("ayuda", cmd_ayuda))
-    app.add_handler(CommandHandler("partidos", cmd_partidos))
-    app.add_handler(CallbackQueryHandler(cb_liga, pattern=r"^liga\|"))
-    app.add_handler(CallbackQueryHandler(cb_partido, pattern=r"^partido\|"))
-    app.add_handler(CallbackQueryHandler(cb_volver_ligas, pattern=r"^volver_ligas$"))
-
-    # Scheduler: 9AM y 12PM hora Argentina (UTC-3)
+async def post_init(app: Application) -> None:
+    """Inicia el scheduler después de que el event loop esté corriendo."""
     scheduler = AsyncIOScheduler(timezone="America/Argentina/Buenos_Aires")
     scheduler.add_job(
         publicar_partidos_del_dia,
@@ -246,6 +235,22 @@ def main():
         id="publicar_12pm",
     )
     scheduler.start()
+    logger.info("Scheduler iniciado: publicaciones a las 9AM y 12PM ART")
+
+
+def main():
+    if not BOT_TOKEN:
+        raise ValueError("TELEGRAM_BOT_TOKEN no configurado")
+
+    app = Application.builder().token(BOT_TOKEN).post_init(post_init).build()
+
+    # Handlers
+    app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("ayuda", cmd_ayuda))
+    app.add_handler(CommandHandler("partidos", cmd_partidos))
+    app.add_handler(CallbackQueryHandler(cb_liga, pattern=r"^liga\|"))
+    app.add_handler(CallbackQueryHandler(cb_partido, pattern=r"^partido\|"))
+    app.add_handler(CallbackQueryHandler(cb_volver_ligas, pattern=r"^volver_ligas$"))
 
     logger.info("Bot iniciado. Polling...")
     app.run_polling(drop_pending_updates=True)
