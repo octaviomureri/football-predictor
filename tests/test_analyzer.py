@@ -52,3 +52,65 @@ def test_analyze_schedule_avg_corners_zero_when_no_data():
         result = analyze_schedule(events, 42, "eng.1")
     assert result["avg_corners"] == 0
     assert result["avg_yellow_cards"] == 0
+
+def test_get_all_team_events_uses_api_football_for_af_slug():
+    from unittest.mock import patch
+    from analyzer import get_all_team_events
+
+    af_events = [
+        {
+            "id": "af_999",
+            "date": "2025-05-10T20:00:00Z",
+            "_league_slug": "af:130",
+            "_source": "api_football",
+            "competitions": [{
+                "status": {"type": {"completed": True}},
+                "_stats": {},
+                "competitors": [
+                    {"homeAway": "home", "team": {"id": "42"}, "score": "2", "winner": True},
+                    {"homeAway": "away", "team": {"id": "99"}, "score": "1", "winner": False},
+                ]
+            }]
+        }
+    ]
+
+    with patch('api_football_client.get_team_events', return_value=af_events):
+        result = get_all_team_events("42", "af:130", team_name="River Plate")
+
+    assert len(result) == 1
+    assert result[0]["_source"] == "api_football"
+
+def test_get_all_team_events_fallback_when_espn_insufficient():
+    from unittest.mock import patch, MagicMock
+    from analyzer import get_all_team_events
+
+    # ESPN devuelve solo 2 partidos (< 5)
+    espn_event = {
+        "id": "esp_1",
+        "date": "2025-04-01T00:00:00Z",
+        "_league_slug": "arg.1",
+        "competitions": [{"status": {"type": {"completed": True}}, "competitors": [
+            {"homeAway": "home", "team": {"id": "42"}, "score": "1", "winner": True},
+            {"homeAway": "away", "team": {"id": "99"}, "score": "0", "winner": False},
+        ]}]
+    }
+    af_event = {
+        "id": "af_999",
+        "date": "2025-05-01T00:00:00Z",
+        "_league_slug": "arg.1",
+        "_source": "api_football",
+        "competitions": [{"status": {"type": {"completed": True}}, "_stats": {}, "competitors": [
+            {"homeAway": "home", "team": {"id": "42"}, "score": "2", "winner": True},
+            {"homeAway": "away", "team": {"id": "99"}, "score": "1", "winner": False},
+        ]}]
+    }
+
+    mock_schedule = MagicMock()
+    mock_schedule.return_value = {"events": [espn_event, espn_event]}  # solo 2
+
+    with patch('api_client.get_team_schedule', mock_schedule), \
+         patch('api_football_client.get_team_events', return_value=[af_event]):
+        result = get_all_team_events("42", "arg.1", team_name="River Plate")
+
+    ids = [e["id"] for e in result]
+    assert "af_999" in ids

@@ -1,4 +1,4 @@
-from api_client import get_team_schedule, get_summary, get_all_team_events, LEAGUES
+from api_client import get_team_schedule, get_summary, LEAGUES, EUROPEAN_LEAGUES, SOUTH_AMERICAN_LEAGUES
 
 def safe(val, default=0):
     return val if val is not None else default
@@ -72,6 +72,66 @@ def extract_team_stats_from_summary(summary, team_id):
                 pass
     return stats
 
+def get_all_team_events(team_id, primary_slug, team_name=""):
+    """Obtiene partidos del equipo en todas sus competiciones relevantes.
+    Usa API-Football si el slug empieza con 'af:' o si ESPN devuelve menos de 5 partidos.
+    """
+    all_events = []
+    seen_event_ids = set()
+
+    # Slug af: → ir directo a API-Football
+    if primary_slug.startswith("af:"):
+        try:
+            from api_football_client import get_team_events as af_get
+            return af_get(team_name, primary_slug)
+        except Exception:
+            return []
+
+    # Determinar ligas adicionales según la liga principal
+    extra_slugs = []
+    if primary_slug in EUROPEAN_LEAGUES:
+        extra_slugs = ["uefa.champions", "uefa.europa"]
+    elif primary_slug in SOUTH_AMERICAN_LEAGUES:
+        extra_slugs = ["conmebol.libertadores", "conmebol.sudamericana"]
+
+    slugs_to_check = [primary_slug] + extra_slugs
+
+    for slug in slugs_to_check:
+        try:
+            data = get_team_schedule(slug, team_id)
+            events = data.get("events", [])
+            for e in events:
+                if e["id"] not in seen_event_ids:
+                    seen_event_ids.add(e["id"])
+                    e["_league_slug"] = slug
+                    all_events.append(e)
+        except Exception:
+            continue
+
+    all_events.sort(key=lambda e: e.get("date", ""))
+
+    # Fallback a API-Football si hay pocos datos de ESPN
+    if len(all_events) < 5 and team_name:
+        try:
+            from api_football_client import get_team_events as af_get
+            league_map = {
+                "arg.1": "af:112", "bra.1": "af:71",
+                "eng.1": "af:39", "esp.1": "af:140",
+                "ita.1": "af:135", "ger.1": "af:78", "fra.1": "af:61",
+            }
+            af_slug = league_map.get(primary_slug)
+            if af_slug:
+                af_events = af_get(team_name, af_slug)
+                for e in af_events:
+                    if e["id"] not in seen_event_ids:
+                        seen_event_ids.add(e["id"])
+                        all_events.append(e)
+                all_events.sort(key=lambda e: e.get("date", ""))
+        except Exception:
+            pass
+
+    return all_events
+
 def analyze_schedule(events, team_id, league_slug, last=10):
     results = []
     gf_list, ga_list = [], []
@@ -111,12 +171,16 @@ def analyze_schedule(events, team_id, league_slug, last=10):
         else:
             results.append("D")
 
-        # Stats del partido desde el summary
         try:
-            summary = get_summary(league_slug, e["id"])
+            comp = e["competitions"][0]
+            # Eventos de API-Football traen _stats directamente
+            if "_stats" in comp and comp["_stats"]:
+                team_stats = comp["_stats"]
+                summary = {}
+            else:
+                summary = get_summary(league_slug, e["id"])
+                team_stats = extract_team_stats_from_summary(summary, team_id)
 
-            # Stats del equipo
-            team_stats = extract_team_stats_from_summary(summary, team_id)
             if "totalShots" in team_stats:
                 shots_list.append(team_stats["totalShots"])
             if "shotsOnTarget" in team_stats:
@@ -130,7 +194,6 @@ def analyze_schedule(events, team_id, league_slug, last=10):
             if "yellowCards" in team_stats:
                 yellow_cards_list.append(team_stats["yellowCards"])
 
-            # Stats por jugador
             g, a, c = extract_player_stats_from_summary(summary, team_id)
             for name, val in g.items():
                 all_goals[name] = all_goals.get(name, 0) + val
@@ -237,8 +300,8 @@ def get_mood_alerts(home_form, away_form, home_name, away_name):
     return alerts
 
 def analyze_match(home_slug, away_slug, home_team_id, away_team_id, home_name="Local", away_name="Visitante"):
-    home_events = get_all_team_events(home_team_id, home_slug)
-    away_events = get_all_team_events(away_team_id, away_slug)
+    home_events = get_all_team_events(home_team_id, home_slug, team_name=home_name)
+    away_events = get_all_team_events(away_team_id, away_slug, team_name=away_name)
 
     home_form = analyze_schedule(home_events, home_team_id, home_slug)
     away_form = analyze_schedule(away_events, away_team_id, away_slug)
