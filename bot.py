@@ -108,7 +108,7 @@ async def cb_liga(update: Update, context: ContextTypes.DEFAULT_TYPE):
     league = query.data.split("|", 1)[1]
     await query.edit_message_text(f"⏳ Cargando partidos de *{league}*...", parse_mode="Markdown")
 
-    fixtures = get_fixtures(league)
+    fixtures = [f for f in get_fixtures(league) if not f.get("completed")]
     if not fixtures:
         await query.edit_message_text(format_no_fixtures(league), parse_mode="Markdown")
         return
@@ -194,7 +194,7 @@ async def publicar_partidos_del_dia(bot):
         return
 
     for league in LIGAS_CANAL:
-        fixtures = get_fixtures(league)
+        fixtures = [f for f in get_fixtures(league) if not f.get("completed")]
         if not fixtures:
             continue
 
