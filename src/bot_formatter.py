@@ -20,6 +20,9 @@ def format_fixtures_list(fixtures: list, league: str) -> str:
         icon = "✅" if f.get("completed") else "🟢"
         time_part = f" — {time_str}" if time_str else ""
         lines.append(f"{icon} {f['home_name']} vs {f['away_name']}{time_part}")
+    lines.append("\n─────────────────────")
+    lines.append("🧠 *¿Querés el análisis táctico y parlay sugerido?*")
+    lines.append("👉 Escribile a @Fut_Analisis_Bot — elegí la liga y el partido.")
     return "\n".join(lines)
 
 def format_insight_message(home_name: str, away_name: str, league: str, insight: dict) -> str:
