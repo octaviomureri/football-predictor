@@ -369,6 +369,50 @@ async def publicar_partidos_del_dia(bot):
             logger.error(f"Error publicando lista {league}: {e}")
 
 
+async def publicar_promo(bot):
+    """Cada 2 horas publica en el canal 3 partidos importantes con invitación al bot."""
+    if not CHANNEL_ID:
+        return
+
+    # Recolectar hasta 3 partidos pendientes de las ligas principales
+    destacados = []
+    for league in LIGAS_TRIAL:
+        fixtures = [f for f in get_fixtures(league) if not f.get("completed")]
+        for f in fixtures[:1]:
+            destacados.append((league, f))
+        if len(destacados) >= 3:
+            break
+
+    try:
+        if destacados:
+            lines = [
+                "🔥 *¿Querés los pronósticos para estos partidos?*\n",
+            ]
+            for league, f in destacados:
+                from bot_formatter import _format_time
+                time_str = _format_time(f.get("date", ""))
+                time_part = f" — {time_str}" if time_str else ""
+                lines.append(f"⚽ *{f['home_name']} vs {f['away_name']}*{time_part} ({league})")
+
+            lines.append(
+                "\n🧠 Análisis táctico, resultado probable, corners, amarillas y parlay sugerido.\n"
+                "👉 Escribile a @Fut\\_Analisis\\_Bot y pedí el análisis de cualquier partido."
+            )
+            text = "\n".join(lines)
+        else:
+            text = (
+                "⚽ *¿Buscás pronósticos de fútbol?*\n\n"
+                "Hoy no hay partidos en curso, pero podés consultar estadísticas, "
+                "análisis tácticos y parlays sugeridos para cualquier partido.\n\n"
+                "👉 Escribile a @Fut\\_Analisis\\_Bot para más información."
+            )
+
+        await bot.send_message(chat_id=CHANNEL_ID, text=text, parse_mode="Markdown")
+        logger.info("Promo publicada en el canal")
+    except Exception as e:
+        logger.error(f"Error publicando promo: {e}")
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 async def post_init(app: Application) -> None:
@@ -391,8 +435,15 @@ async def post_init(app: Application) -> None:
         CronTrigger(hour=0, minute=0),
         id="reset_daily",
     )
+    # Promo cada 2 horas (10AM, 12PM, 2PM, 4PM, 6PM, 8PM, 10PM ART)
+    scheduler.add_job(
+        publicar_promo,
+        CronTrigger(hour="10,12,14,16,18,20,22", minute=30),
+        args=[app.bot],
+        id="promo_2h",
+    )
     scheduler.start()
-    logger.info("Scheduler iniciado: publicaciones a las 9AM y 12PM ART")
+    logger.info("Scheduler iniciado: partidos 9AM/12PM, promo cada 2h ART")
 
 
 def main():
