@@ -2,7 +2,7 @@ import os, sys, logging, asyncio
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    Application, CommandHandler, CallbackQueryHandler, ContextTypes
+    Application, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 )
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -93,6 +93,30 @@ def _build_liga_keyboard() -> InlineKeyboardMarkup:
 
 
 # ── Handlers del bot privado ──────────────────────────────────────────────────
+
+async def msg_auto_reply(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Responde automáticamente a cualquier mensaje que no sea un comando."""
+    keyboard = [
+        [InlineKeyboardButton("⚽ Ver partidos del día", callback_data="abrir_partidos")],
+        [InlineKeyboardButton("🎯 Ver planes", callback_data="volver_planes")],
+    ]
+    await update.message.reply_text(
+        "👋 ¡Hola! Para acceder a los análisis tácticos y predicciones usá los botones o los comandos:\n\n"
+        "⚽ /partidos — Ver partidos del día\n"
+        "🎯 /suscribir — Ver planes\n"
+        "📊 /mi\\_plan — Tu suscripción actual",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+async def cb_abrir_partidos(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Abre el menú de ligas desde un botón."""
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(
+        "¿Qué liga querés ver?",
+        reply_markup=_build_liga_keyboard(),
+    )
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.effective_user.id
@@ -397,6 +421,10 @@ def main():
     app.add_handler(CallbackQueryHandler(cb_cancelar_ok,      pattern=r"^cancelar_ok$"))
     app.add_handler(CallbackQueryHandler(cb_cambiar_plan,     pattern=r"^cambiar_plan$"))
     app.add_handler(CallbackQueryHandler(cb_volver_mi_plan,   pattern=r"^volver_mi_plan$"))
+    app.add_handler(CallbackQueryHandler(cb_abrir_partidos,   pattern=r"^abrir_partidos$"))
+
+    # Auto-reply para mensajes que no son comandos
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg_auto_reply))
 
     logger.info("Bot iniciado. Polling...")
     app.run_polling(drop_pending_updates=True)
