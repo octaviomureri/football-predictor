@@ -188,7 +188,7 @@ async def cb_volver_ligas(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ── Publicación automática en canal ──────────────────────────────────────────
 
 async def publicar_partidos_del_dia(bot):
-    """Publica en el canal los partidos del día + análisis automático."""
+    """Publica en el canal solo la lista de partidos del día por liga."""
     if not CHANNEL_ID:
         logger.warning("TELEGRAM_CHANNEL_ID no configurado, saltando publicación")
         return
@@ -198,35 +198,12 @@ async def publicar_partidos_del_dia(bot):
         if not fixtures:
             continue
 
-        # Publicar lista de partidos
         text = format_fixtures_list(fixtures, league)
         try:
             await bot.send_message(chat_id=CHANNEL_ID, text=text, parse_mode="Markdown")
+            logger.info(f"Publicados {len(fixtures)} partidos de {league}")
         except Exception as e:
             logger.error(f"Error publicando lista {league}: {e}")
-            continue
-
-        # Analizar los primeros MAX_AUTO_ANALISIS partidos
-        slug = _league_slug(league)
-        for fixture in fixtures[:MAX_AUTO_ANALISIS]:
-            home_id = str(fixture["home_id"])
-            away_id = str(fixture["away_id"])
-            home_name = fixture["home_name"]
-            away_name = fixture["away_name"]
-
-            analysis = get_analysis(league, slug, slug, home_id, away_id, home_name, away_name)
-            if not analysis:
-                continue
-
-            insight = get_insight(analysis, home_name, away_name, home_id, away_id, slug, slug)
-            if not insight:
-                continue
-
-            msg = format_insight_message(home_name, away_name, league, insight)
-            try:
-                await bot.send_message(chat_id=CHANNEL_ID, text=msg, parse_mode="Markdown")
-            except Exception as e:
-                logger.error(f"Error publicando análisis {home_name} vs {away_name}: {e}")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
