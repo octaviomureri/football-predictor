@@ -9,8 +9,17 @@ from apscheduler.triggers.cron import CronTrigger
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 from bot_api import get_fixtures, get_analysis, get_insight
 from bot_formatter import format_fixtures_list, format_insight_message, format_no_fixtures
+from db import init_db, get_or_create_user, can_analyze, use_trial, increment_analyses, reset_daily_analyses
+from bot_subscription import (
+    cmd_suscribir, cb_plan, cb_pagar, cb_volver_planes,
+    cmd_mi_plan, cb_historial, cb_cancelar_confirm, cb_cancelar_ok,
+    cb_cambiar_plan, cb_volver_mi_plan,
+)
 
 load_dotenv()
+
+DB_PATH = os.environ.get("DB_PATH", "data/football.db")
+init_db(DB_PATH)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -35,6 +44,9 @@ LIGAS_CANAL = [
 
 # Máximo de partidos a analizar automáticamente por liga
 MAX_AUTO_ANALISIS = 3
+
+LIGAS_TRIAL = ["Champions League", "Premier League", "La Liga", "Brasileirao", "Liga Argentina"]
+MAX_TRIAL_FIXTURES = 5
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -83,13 +95,115 @@ def _build_liga_keyboard() -> InlineKeyboardMarkup:
 # ── Handlers del bot privado ──────────────────────────────────────────────────
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    telegram_id = update.effective_user.id
+    get_or_create_user(
+        DB_PATH, telegram_id,
+        update.effective_user.username or "",
+        update.effective_user.first_name or "",
+    )
+    _, reason = can_analyze(DB_PATH, telegram_id)
+
+    if reason == "trial":
+        await update.message.reply_text(
+            "⚽ *¡Bienvenido a Football Predictor!*\n\n"
+            "Tenés *1 análisis de prueba gratuito* disponible.\n"
+            "Elegí un partido destacado de hoy para probarlo:",
+            parse_mode="Markdown",
+        )
+        await _show_trial_fixtures(update, context)
+    else:
+        await update.message.reply_text(
+            "⚽ *Football Predictor Bot*\n\n"
+            "Comandos disponibles:\n"
+            "/partidos — Ver partidos del día por liga\n"
+            "/suscribir — Ver planes y suscribirte\n"
+            "/mi_plan — Ver tu plan actual\n"
+            "/ayuda — Mostrar esta ayuda",
+            parse_mode="Markdown",
+        )
+
+
+async def _show_trial_fixtures(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Muestra los partidos destacados disponibles para el trial."""
+    trial_fixtures = []
+    for league in LIGAS_TRIAL:
+        fixtures = [f for f in get_fixtures(league) if not f.get("completed")]
+        for f in fixtures[:2]:
+            trial_fixtures.append((league, f))
+        if len(trial_fixtures) >= MAX_TRIAL_FIXTURES:
+            break
+
+    if not trial_fixtures:
+        await update.message.reply_text(
+            "No hay partidos destacados disponibles ahora mismo.\n"
+            "Usá /partidos para ver todos los partidos.\n"
+            "Usá /suscribir para acceder al análisis completo."
+        )
+        return
+
+    context.user_data["trial_fixtures"] = trial_fixtures
+    keyboard = []
+    for i, (league, f) in enumerate(trial_fixtures):
+        label = f"{f['home_name']} vs {f['away_name']} ({league})"
+        keyboard.append([InlineKeyboardButton(label, callback_data=f"trial|{i}")])
+
     await update.message.reply_text(
-        "⚽ *Football Predictor Bot*\n\n"
-        "Comandos disponibles:\n"
-        "/partidos — Ver partidos del día por liga\n"
-        "/ayuda — Mostrar esta ayuda",
+        "🎯 *Partidos destacados de hoy:*",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+
+async def cb_trial(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """El usuario eligió un partido para su análisis de prueba."""
+    query = update.callback_query
+    await query.answer()
+    telegram_id = update.effective_user.id
+
+    _, reason = can_analyze(DB_PATH, telegram_id)
+    if reason != "trial":
+        await query.edit_message_text(
+            "⚠️ Ya usaste tu análisis de prueba. Usá /suscribir para continuar."
+        )
+        return
+
+    idx = int(query.data.split("|")[1])
+    trial_fixtures = context.user_data.get("trial_fixtures", [])
+    if not trial_fixtures or idx >= len(trial_fixtures):
+        await query.edit_message_text("⚠️ Datos expirados. Escribí /start para reintentar.")
+        return
+
+    league, f = trial_fixtures[idx]
+    home_name = f["home_name"]
+    away_name = f["away_name"]
+    slug = _league_slug(league)
+
+    await query.edit_message_text(
+        f"⏳ Generando tu análisis de prueba para *{home_name} vs {away_name}*...\n"
+        "_Esto puede tardar unos segundos_",
         parse_mode="Markdown",
     )
+
+    analysis = get_analysis(league, slug, slug, str(f["home_id"]), str(f["away_id"]), home_name, away_name)
+    if not analysis:
+        await query.edit_message_text("⚠️ No se pudo obtener el análisis. Intentá con otro partido.")
+        return
+
+    insight = get_insight(analysis, home_name, away_name, str(f["home_id"]), str(f["away_id"]), slug, slug)
+    if not insight:
+        await query.edit_message_text("⚠️ Análisis táctico no disponible. Intentá con otro partido.")
+        return
+
+    use_trial(DB_PATH, telegram_id)
+
+    text = format_insight_message(home_name, away_name, league, insight)
+    keyboard = [[InlineKeyboardButton("🎯 Ver planes y suscribirme", callback_data="volver_planes")]]
+    await query.edit_message_text(
+        text + "\n\n_Este fue tu análisis de prueba gratuito._",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
 
 async def cmd_ayuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await cmd_start(update, context)
@@ -131,9 +245,31 @@ async def cb_liga(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def cb_partido(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """El usuario eligió un partido: generar análisis táctico."""
+    """El usuario eligió un partido: verificar acceso y generar análisis táctico."""
     query = update.callback_query
     await query.answer()
+
+    telegram_id = update.effective_user.id
+    get_or_create_user(
+        DB_PATH, telegram_id,
+        update.effective_user.username or "",
+        update.effective_user.first_name or "",
+    )
+
+    can, reason = can_analyze(DB_PATH, telegram_id)
+    if not can:
+        if reason == "no_trial":
+            msg = "🔒 Ya usaste tu análisis gratuito.\n\nSuscribite para acceder al análisis completo:"
+        elif reason == "limit_reached":
+            msg = "🔒 Alcanzaste el límite de análisis de hoy.\n\nTu contador se reinicia a las 00:00 ART.\nO suscribite a un plan superior:"
+        elif reason == "expired":
+            msg = "🔒 Tu suscripción venció.\n\nRenovate para seguir accediendo:"
+        else:
+            msg = "🔒 Necesitás una suscripción para ver el análisis:"
+
+        keyboard = [[InlineKeyboardButton("🎯 Ver planes", callback_data="volver_planes")]]
+        await query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(keyboard))
+        return
 
     idx = int(query.data.split("|")[1])
     fixtures = context.user_data.get("fixtures", [])
@@ -171,6 +307,9 @@ async def cb_partido(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown",
         )
         return
+
+    if reason == "subscription":
+        increment_analyses(DB_PATH, telegram_id)
 
     text = format_insight_message(home_name, away_name, league, insight)
     await query.edit_message_text(text, parse_mode="Markdown")
@@ -223,6 +362,11 @@ async def post_init(app: Application) -> None:
         args=[app.bot],
         id="publicar_12pm",
     )
+    scheduler.add_job(
+        lambda: reset_daily_analyses(DB_PATH),
+        CronTrigger(hour=0, minute=0),
+        id="reset_daily",
+    )
     scheduler.start()
     logger.info("Scheduler iniciado: publicaciones a las 9AM y 12PM ART")
 
@@ -240,6 +384,19 @@ def main():
     app.add_handler(CallbackQueryHandler(cb_liga, pattern=r"^liga\|"))
     app.add_handler(CallbackQueryHandler(cb_partido, pattern=r"^partido\|"))
     app.add_handler(CallbackQueryHandler(cb_volver_ligas, pattern=r"^volver_ligas$"))
+
+    # Handlers de suscripción
+    app.add_handler(CommandHandler("suscribir", cmd_suscribir))
+    app.add_handler(CommandHandler("mi_plan", cmd_mi_plan))
+    app.add_handler(CallbackQueryHandler(cb_trial,            pattern=r"^trial\|"))
+    app.add_handler(CallbackQueryHandler(cb_plan,             pattern=r"^plan\|"))
+    app.add_handler(CallbackQueryHandler(cb_pagar,            pattern=r"^pagar\|"))
+    app.add_handler(CallbackQueryHandler(cb_volver_planes,    pattern=r"^volver_planes$"))
+    app.add_handler(CallbackQueryHandler(cb_historial,        pattern=r"^historial$"))
+    app.add_handler(CallbackQueryHandler(cb_cancelar_confirm, pattern=r"^cancelar_confirm$"))
+    app.add_handler(CallbackQueryHandler(cb_cancelar_ok,      pattern=r"^cancelar_ok$"))
+    app.add_handler(CallbackQueryHandler(cb_cambiar_plan,     pattern=r"^cambiar_plan$"))
+    app.add_handler(CallbackQueryHandler(cb_volver_mi_plan,   pattern=r"^volver_mi_plan$"))
 
     logger.info("Bot iniciado. Polling...")
     app.run_polling(drop_pending_updates=True)
