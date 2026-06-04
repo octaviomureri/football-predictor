@@ -370,9 +370,13 @@ async def publicar_partidos_del_dia(bot):
 
 
 async def publicar_promo(bot):
-    """Cada 2 horas publica en el canal 3 partidos importantes con invitación al bot."""
+    """Publica promo en el canal. Con partidos: cada 2 horas. Sin partidos: solo a las 10:30 y 20:30."""
     if not CHANNEL_ID:
         return
+
+    from datetime import datetime
+    import pytz
+    hora_actual = datetime.now(pytz.timezone("America/Argentina/Buenos_Aires")).hour
 
     # Recolectar hasta 3 partidos pendientes de las ligas principales
     destacados = []
@@ -383,17 +387,18 @@ async def publicar_promo(bot):
         if len(destacados) >= 3:
             break
 
+    # Sin partidos: solo publicar a las 10:30 y 20:30
+    if not destacados and hora_actual not in (10, 20):
+        return
+
     try:
         if destacados:
-            lines = [
-                "🔥 *¿Querés los pronósticos para estos partidos?*\n",
-            ]
+            lines = ["🔥 *¿Querés los pronósticos para estos partidos?*\n"]
             for league, f in destacados:
                 from bot_formatter import _format_time
                 time_str = _format_time(f.get("date", ""))
                 time_part = f" — {time_str}" if time_str else ""
                 lines.append(f"⚽ *{f['home_name']} vs {f['away_name']}*{time_part} ({league})")
-
             lines.append(
                 "\n🧠 Análisis táctico, resultado probable, corners, amarillas y parlay sugerido.\n"
                 "👉 Escribile a @Fut\\_Analisis\\_Bot y pedí el análisis de cualquier partido."

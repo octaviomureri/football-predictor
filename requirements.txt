@@ -6,3 +6,4 @@ pytest
 python-telegram-bot[job-queue]>=21.0
 APScheduler>=3.10
 mercadopago
+pytz
