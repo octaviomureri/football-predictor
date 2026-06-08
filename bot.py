@@ -266,15 +266,15 @@ async def cb_partido(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     can, reason = can_analyze(DB_PATH, telegram_id)
-    if not can:
-        if reason == "no_trial":
-            msg = "🔒 Ya usaste tu análisis gratuito.\n\nSuscribite para acceder al análisis completo:"
-        elif reason == "limit_reached":
+
+    # Trial no da análisis gratis — requiere suscripción
+    if reason == "trial" or not can:
+        if reason == "limit_reached":
             msg = "🔒 Alcanzaste el límite de análisis de hoy.\n\nTu contador se reinicia a las 00:00 ART.\nO suscribite a un plan superior:"
         elif reason == "expired":
             msg = "🔒 Tu suscripción venció.\n\nRenovate para seguir accediendo:"
         else:
-            msg = "🔒 Necesitás una suscripción para ver el análisis:"
+            msg = "🔒 Para acceder al análisis táctico necesitás una suscripción:"
 
         keyboard = [[InlineKeyboardButton("🎯 Ver planes", callback_data="volver_planes")]]
         await query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(keyboard))
