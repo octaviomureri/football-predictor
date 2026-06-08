@@ -13,7 +13,7 @@ from db import init_db, get_or_create_user, can_analyze, use_trial, increment_an
 from bot_subscription import (
     cmd_suscribir, cb_plan, cb_pagar, cb_volver_planes,
     cmd_mi_plan, cb_historial, cb_cancelar_confirm, cb_cancelar_ok,
-    cb_cambiar_plan, cb_volver_mi_plan,
+    cb_cambiar_plan, cb_volver_mi_plan, PLAN_LABELS,
 )
 
 load_dotenv()
@@ -118,6 +118,27 @@ async def cb_abrir_partidos(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=_build_liga_keyboard(),
     )
 
+def _get_featured_fixtures() -> list:
+    """Retorna los 2 partidos más relevantes del día (iguales para todos los usuarios)."""
+    for league in LIGAS_TRIAL:
+        fixtures = [f for f in get_fixtures(league) if not f.get("completed")]
+        if len(fixtures) >= 2:
+            return [(league, f) for f in fixtures[:2]]
+        elif fixtures:
+            # Seguir buscando en otras ligas para completar 2
+            result = [(league, f) for f in fixtures]
+            for other_league in LIGAS_TRIAL:
+                if other_league == league:
+                    continue
+                other = [f for f in get_fixtures(other_league) if not f.get("completed")]
+                for f in other[:1]:
+                    result.append((other_league, f))
+                if len(result) >= 2:
+                    return result[:2]
+            return result
+    return []
+
+
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.effective_user.id
     get_or_create_user(
@@ -125,105 +146,69 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         update.effective_user.username or "",
         update.effective_user.first_name or "",
     )
-    _, reason = can_analyze(DB_PATH, telegram_id)
 
-    if reason == "trial":
-        await update.message.reply_text(
-            "⚽ *¡Bienvenido a Football Predictor!*\n\n"
-            "Tenés *1 análisis de prueba gratuito* disponible.\n"
-            "Elegí un partido destacado de hoy para probarlo:",
-            parse_mode="Markdown",
+    featured = _get_featured_fixtures()
+
+    if featured:
+        lines = ["⚽ *¡Bienvenido a Análisis Deportivo!*\n\n🔥 *Partidos destacados de hoy:*\n"]
+        for league, f in featured:
+            from bot_formatter import _format_time
+            time_str = _format_time(f.get("date", ""))
+            time_part = f" — {time_str}" if time_str else ""
+            lines.append(f"⚽ *{f['home_name']} vs {f['away_name']}*{time_part} ({league})")
+        lines.append(
+            "\n🧠 Para obtener el análisis táctico completo y el parlay sugerido de estos y más partidos, "
+            "necesitás una suscripción.\n\n"
+            "Usá /suscribir para ver los planes disponibles."
         )
-        await _show_trial_fixtures(update, context)
+        keyboard = [
+            [InlineKeyboardButton("🎯 Ver planes", callback_data="volver_planes")],
+            [InlineKeyboardButton("⚽ Ver todos los partidos", callback_data="abrir_partidos")],
+        ]
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
     else:
         await update.message.reply_text(
-            "⚽ *Football Predictor Bot*\n\n"
+            "⚽ *Análisis Deportivo Bot*\n\n"
+            "Predicciones tácticas + parlay sugerido para los mejores partidos del mundo.\n\n"
             "Comandos disponibles:\n"
             "/partidos — Ver partidos del día por liga\n"
             "/suscribir — Ver planes y suscribirte\n"
-            "/mi_plan — Ver tu plan actual\n"
-            "/ayuda — Mostrar esta ayuda",
+            "/mi\\_plan — Ver tu plan actual",
             parse_mode="Markdown",
         )
 
 
-async def _show_trial_fixtures(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Muestra los partidos destacados disponibles para el trial."""
-    trial_fixtures = []
-    for league in LIGAS_TRIAL:
-        fixtures = [f for f in get_fixtures(league) if not f.get("completed")]
-        for f in fixtures[:2]:
-            trial_fixtures.append((league, f))
-        if len(trial_fixtures) >= MAX_TRIAL_FIXTURES:
-            break
-
-    if not trial_fixtures:
-        await update.message.reply_text(
-            "No hay partidos destacados disponibles ahora mismo.\n"
-            "Usá /partidos para ver todos los partidos.\n"
-            "Usá /suscribir para acceder al análisis completo."
-        )
-        return
-
-    context.user_data["trial_fixtures"] = trial_fixtures
-    keyboard = []
-    for i, (league, f) in enumerate(trial_fixtures):
-        label = f"{f['home_name']} vs {f['away_name']} ({league})"
-        keyboard.append([InlineKeyboardButton(label, callback_data=f"trial|{i}")])
-
-    await update.message.reply_text(
-        "🎯 *Partidos destacados de hoy:*",
+async def cb_trial(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler legacy — redirige a ver planes."""
+    query = update.callback_query
+    await query.answer()
+    keyboard = [
+        [InlineKeyboardButton(PLAN_LABELS["basic"],     callback_data="plan|basic")],
+        [InlineKeyboardButton(PLAN_LABELS["pro"],       callback_data="plan|pro")],
+        [InlineKeyboardButton(PLAN_LABELS["unlimited"], callback_data="plan|unlimited")],
+    ]
+    await query.edit_message_text(
+        "🎯 *Elegí tu plan para acceder al análisis completo:*",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
+# dummy para mantener compatibilidad con import
+async def _placeholder_trial(*args, **kwargs):
+    pass
 
-async def cb_trial(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """El usuario eligió un partido para su análisis de prueba."""
-    query = update.callback_query
-    await query.answer()
-    telegram_id = update.effective_user.id
+async def _show_trial_fixtures(*args, **kwargs):
+    pass
 
-    _, reason = can_analyze(DB_PATH, telegram_id)
-    if reason != "trial":
-        await query.edit_message_text(
-            "⚠️ Ya usaste tu análisis de prueba. Usá /suscribir para continuar."
-        )
-        return
-
-    idx = int(query.data.split("|")[1])
-    trial_fixtures = context.user_data.get("trial_fixtures", [])
-    if not trial_fixtures or idx >= len(trial_fixtures):
-        await query.edit_message_text("⚠️ Datos expirados. Escribí /start para reintentar.")
-        return
-
-    league, f = trial_fixtures[idx]
-    home_name = f["home_name"]
-    away_name = f["away_name"]
-    slug = _league_slug(league)
-
-    await query.edit_message_text(
-        f"⏳ Generando tu análisis de prueba para *{home_name} vs {away_name}*...\n"
-        "_Esto puede tardar unos segundos_",
-        parse_mode="Markdown",
-    )
-
-    analysis = get_analysis(league, slug, slug, str(f["home_id"]), str(f["away_id"]), home_name, away_name)
-    if not analysis:
-        await query.edit_message_text("⚠️ No se pudo obtener el análisis. Intentá con otro partido.")
-        return
-
-    insight = get_insight(analysis, home_name, away_name, str(f["home_id"]), str(f["away_id"]), slug, slug)
-    if not insight:
-        await query.edit_message_text("⚠️ Análisis táctico no disponible. Intentá con otro partido.")
-        return
-
-    use_trial(DB_PATH, telegram_id)
-
-    text = format_insight_message(home_name, away_name, league, insight)
+async def _cb_trial_old(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Stub — reemplazado por cb_trial."""
     keyboard = [[InlineKeyboardButton("🎯 Ver planes y suscribirme", callback_data="volver_planes")]]
-    await query.edit_message_text(
-        text + "\n\n_Este fue tu análisis de prueba gratuito._",
+    await update.callback_query.edit_message_text(
+        "Para acceder al análisis completo, suscribite:",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
@@ -375,8 +360,8 @@ async def publicar_promo(bot):
         return
 
     from datetime import datetime
-    import pytz
-    hora_actual = datetime.now(pytz.timezone("America/Argentina/Buenos_Aires")).hour
+    from zoneinfo import ZoneInfo
+    hora_actual = datetime.now(ZoneInfo("America/Argentina/Buenos_Aires")).hour
 
     # Recolectar hasta 3 partidos pendientes de las ligas principales
     destacados = []

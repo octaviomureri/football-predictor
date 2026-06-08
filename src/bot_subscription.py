@@ -9,7 +9,7 @@ DB_PATH = os.environ.get("DB_PATH", "data/football.db")
 BASE_URL = os.environ.get("WEBHOOK_BASE_URL", "https://web-production-61f66b.up.railway.app")
 
 PLAN_LABELS = {
-    "basic":     "🥉 Básico — 4 análisis/día — $5 USD/mes",
+    "basic":     "🥉 Básico — 3 análisis/día — $5 USD/mes",
     "pro":       "🥈 Pro — 7 análisis/día — $10 USD/mes",
     "unlimited": "🥇 Ilimitado — Sin límite — $20 USD/mes",
 }

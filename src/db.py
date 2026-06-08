@@ -3,7 +3,7 @@ import os
 from datetime import datetime, date
 
 PLAN_LIMITS = {
-    "basic": 4,
+    "basic": 3,
     "pro": 7,
     "unlimited": None,
 }
